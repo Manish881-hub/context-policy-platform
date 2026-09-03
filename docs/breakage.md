@@ -1,0 +1,7 @@
+# Breakage Paragraph — the signal the posting asks for
+
+> **Agent that broke and what I changed** (the paragraph is better signal than a repo).
+>
+> Built a RAG prototype that served `DOC-2011-WIFI` (“no check-in or GPS required — just `SELECT WIFI_PSK`”) as the current procedure for `S123`. It ranked highest on TF overlap, so the agent confidently returned a 2011 direct-DB query that bypassed the policy engine. In staging, a test that replayed the exact hiring brief (`field_app` GPS+check-in vs `support_unauthorized` for the same `S123`) still passed, but a second eval that retrieved docs for `S123` leaked the old procedure. **What changed:** added `src/rag/store.py:81` `_staleness()` (`superseded_by` / `still_valid_as_of` + `deprecated`) so `DOC-2011-WIFI` is flagged `superseded` before the LLM sees it, and `src/rag/checker.py:10` `check_conflicts()` that compares the chunk text against live `SUBS_TBL` (for `S123` on `OLT-1` v5, `INIT-ONT` is disabled). Now `RagStore.search()` returns `warnings: ["DOC-2011-WIFI is superseded — do not serve as current"]` and `conflicts_with_live: true`, and `tests/evals/test_golden_rag_sql.py:14` fails the build if a stale chunk is served as fresh — same `pass^3=100%` gate as the wifi policy. The fix wasn’t a better embedding model, it was treating staleness as data, not a prompt.
+
+**Repro:** `pytest tests/rag/test_rag.py::test_conflicts_with_live_for_ont -v` (red before, green after) and `pytest tests/evals/test_golden_rag_sql.py::test_rag_golden -v` (fails if `DOC-2011-WIFI` served as fresh).

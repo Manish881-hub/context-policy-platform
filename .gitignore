@@ -16,8 +16,10 @@ htmlcov/
 # local-only docs — kept on disk, not pushed to GitHub (per user request)
 MISSION.md
 RESOURCES.md
-docs/
+docs/adr/
 reference/
 assets/
 learning-records/
 lessons/
+# exception: breakage paragraph is the hiring signal — push to GitHub
+!docs/breakage.md
