@@ -1,5 +1,5 @@
-"""Step 5 stub — Text-to-SQL over undocumented schemas.
+from .semantic_layer import SemanticLayer
+from .guardrails import validate_sql, execute_readonly
+from .generator import SqlGenerator
 
-Needs semantic layer: introspect + sample + human-annotated column meanings
-+ guardrails: read-only creds, pattern allowlist, row/time limits.
-"""
+__all__ = ["SemanticLayer", "validate_sql", "execute_readonly", "SqlGenerator"]
