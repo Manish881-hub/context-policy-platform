@@ -18,6 +18,12 @@ from ..provisioning.db import DB_PATH
 from ..sql.generator import SqlGenerator
 from ..sql.guardrails import validate_sql, execute_readonly, ensure_limit
 
+try:
+    from ..observability.audit import audit_log
+except Exception:  # pragma: no cover
+    def audit_log(*args, **kwargs):  # type: ignore
+        pass
+
 class SqlToolResponse(BaseModel):
     status: str
     summary: str
@@ -55,6 +61,10 @@ def query_sql_tool(
         ticket_id=ticket_id,
     )
     decision = _policy.evaluate(ctx)
+    try:
+        audit_log(event="tool_call", policy_id=decision.policy_id, allowed=decision.allowed, reason=decision.reason, technician_id=technician_id, queue_origin=queue_origin, subscriber_id=res_sub, action=Action.QUERY_SQL.value)
+    except Exception:
+        pass
     if not decision.allowed:
         return SqlToolResponse(status="error", summary=f"DENIED: {decision.reason}", error=decision.reason, policy_id=decision.policy_id)
 

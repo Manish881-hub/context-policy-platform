@@ -20,6 +20,12 @@ from ..provisioning.db import DB_PATH
 from ..rag.store import RagStore
 from ..rag.checker import check_conflicts
 
+try:
+    from ..observability.audit import audit_log
+except Exception:  # pragma: no cover
+    def audit_log(*args, **kwargs):  # type: ignore
+        pass
+
 class RagToolResponse(BaseModel):
     status: str
     summary: str
@@ -56,6 +62,10 @@ def query_docs_tool(
         ticket_id=ticket_id,
     )
     decision = _policy.evaluate(ctx)
+    try:
+        audit_log(event="tool_call", policy_id=decision.policy_id, allowed=decision.allowed, reason=decision.reason, technician_id=technician_id, queue_origin=queue_origin, subscriber_id=subscriber_id, action=Action.QUERY_DOCS.value)
+    except Exception:
+        pass
     if not decision.allowed:
         return RagToolResponse(status="error", summary=f"DENIED: {decision.reason}", error=decision.reason, policy_id=decision.policy_id, next_actions=["Verify queue and retry"])
 

@@ -14,6 +14,26 @@ from ..context.models import RequestContext, Action, QueueOrigin
 from .models import Decision
 
 
+# Lazy import to avoid circular
+def _audit(decision: Decision, ctx: RequestContext, event: str = "policy_decision") -> Decision:
+    try:
+        from ..observability.audit import audit_log
+
+        audit_log(
+            event=event,
+            policy_id=decision.policy_id,
+            allowed=decision.allowed,
+            reason=decision.reason,
+            technician_id=ctx.identity.technician_id,
+            queue_origin=ctx.identity.queue_origin.value,
+            subscriber_id=ctx.resource.subscriber_id,
+            action=ctx.action.value,
+        )
+    except Exception:
+        pass
+    return decision
+
+
 class PolicyEngine:
     """Simple predicate engine — declarative enough to evolve to Rego."""
 
@@ -24,23 +44,22 @@ class PolicyEngine:
 
         # --- Sensitive actions: wifi credentials ---
         if action == Action.GET_WIFI_CREDENTIALS:
-            return self._wifi_policy(ctx, q)
-
-        # --- Less sensitive: line status ---
+            return _audit(self._wifi_policy(ctx, q), ctx)
         if action == Action.GET_LINE_STATUS:
-            return self._line_status_policy(ctx, q)
-
+            return _audit(self._line_status_policy(ctx, q), ctx)
         if action == Action.QUERY_DOCS:
-            return self._docs_policy(ctx, q)
-
+            return _audit(self._docs_policy(ctx, q), ctx)
         if action == Action.QUERY_SQL:
-            return self._sql_policy(ctx, q)
+            return _audit(self._sql_policy(ctx, q), ctx)
 
         # Default deny for unknown sensitive actions
-        return Decision(
-            allowed=False,
-            reason=f"Unknown or unconfigured action: {action}",
-            policy_id="default-deny",
+        return _audit(
+            Decision(
+                allowed=False,
+                reason=f"Unknown or unconfigured action: {action}",
+                policy_id="default-deny",
+            ),
+            ctx,
         )
 
     def _wifi_policy(self, ctx: RequestContext, q: QueueOrigin) -> Decision:

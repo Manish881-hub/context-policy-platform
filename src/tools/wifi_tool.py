@@ -20,6 +20,12 @@ from ..policy.engine import PolicyEngine
 from ..provisioning.adapter import ProvisioningAdapter
 from ..provisioning.db import DB_PATH
 
+try:
+    from ..observability.audit import audit_log
+except Exception:  # pragma: no cover
+    def audit_log(*args, **kwargs):  # type: ignore
+        pass
+
 
 class ToolResponse(BaseModel):
     status: str = Field(description="success|warning|error")
@@ -87,6 +93,11 @@ def get_wifi_credentials_tool(
     adapter = _adapter if db_path is None else ProvisioningAdapter(db_path=db_path, policy=_policy)
     policy = _policy
     decision = policy.evaluate(ctx)
+    # audit tool call (policy already audited, this is tool-layer)
+    try:
+        audit_log(event="tool_call", policy_id=decision.policy_id, allowed=decision.allowed, reason=decision.reason, technician_id=technician_id, queue_origin=queue_origin, subscriber_id=subscriber_id, action=Action.GET_WIFI_CREDENTIALS.value)
+    except Exception:
+        pass
     if not decision.allowed:
         return ToolResponse(
             status="error",
@@ -136,6 +147,10 @@ def get_line_status_tool(
     )
     adapter = _adapter if db_path is None else ProvisioningAdapter(db_path=db_path, policy=_policy)
     decision = _policy.evaluate(ctx)
+    try:
+        audit_log(event="tool_call", policy_id=decision.policy_id, allowed=decision.allowed, reason=decision.reason, technician_id=technician_id, queue_origin=queue_origin, subscriber_id=subscriber_id, action=Action.GET_LINE_STATUS.value)
+    except Exception:
+        pass
     if not decision.allowed:
         return ToolResponse(status="error", summary=f"DENIED: {decision.reason}", error=decision.reason, policy_id=decision.policy_id)
     try:
