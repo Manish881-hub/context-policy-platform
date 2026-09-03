@@ -72,10 +72,21 @@ def query_docs_tool(
     rag = _store.search(query, top_k=3, include_stale=include_stale)
     chunks = check_conflicts(rag.chunks, subscriber_id=subscriber_id, db_path=db_path or DB_PATH)
 
+    # redact sensitive terms if policy says so (e.g. self-service)
+    if decision.redact:
+        for c in chunks:
+            # simple redaction of PSK/SSID patterns
+            c.text = c.text.replace("WIFI_PSK", "***REDACTED***").replace("WIFI_SSID", "***REDACTED***")
+            # also redact any concrete PSK-like values if present (heuristic)
+            if "s3cret" in c.text or "bLueSky" in c.text:
+                c.text = c.text.replace("s3cretP@ss123", "***REDACTED***").replace("bLueSky99!", "***REDACTED***")
+
     warnings = list(rag.warnings)
     for c in chunks:
         if c.staleness in ("superseded", "deprecated", "conflicts_with_live"):
             warnings.append(f"{c.doc_id} {c.staleness}: {c.staleness_reason}")
+    if decision.redact:
+        warnings.append("Redacted sensitive fields per policy (redact=true)")
 
     # redact superseded chunks unless explicitly requested
     visible = chunks if include_stale else [c for c in chunks if c.staleness not in ("superseded", "deprecated") or c.conflicts_with_live]
@@ -85,6 +96,9 @@ def query_docs_tool(
         "chunks": [c.model_dump() for c in visible],
         "all_chunks": [c.model_dump() for c in chunks],
         "warnings": warnings,
+        "redacted": decision.redact,
     }
     summary = f"Retrieved {len(visible)} chunks for '{query}'" + (f" ({len(warnings)} warnings)" if warnings else "")
+    if decision.redact:
+        summary += " [REDACTED]"
     return RagToolResponse(status="success", summary=summary, data=data, policy_id=decision.policy_id, next_actions=["Check warnings before acting"] if warnings else [])

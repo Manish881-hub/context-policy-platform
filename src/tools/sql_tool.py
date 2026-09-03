@@ -85,4 +85,13 @@ def query_sql_tool(
     if exec_res["status"] != "success":
         return SqlToolResponse(status="error", summary=f"Execution failed: {exec_res['error']}", error=exec_res["error"], policy_id=decision.policy_id)
 
-    return SqlToolResponse(status="success", summary=f"Executed: {sql} -> {len(exec_res['rows'])} rows", data={"sql": sql, "columns": exec_res["columns"], "rows": exec_res["rows"], "truncated": exec_res.get("truncated", False)}, policy_id=decision.policy_id)
+    rows = exec_res["rows"]
+    # redact sensitive columns if policy says so
+    if decision.redact and exec_res.get("columns"):
+        sensitive = {"WIFI_PSK", "WIFI_SSID"}
+        rows = [{k: ("***REDACTED***" if k in sensitive else v) for k, v in r.items()} for r in rows]
+
+    summary = f"Executed: {sql} -> {len(rows)} rows"
+    if decision.redact:
+        summary += " [REDACTED sensitive columns]"
+    return SqlToolResponse(status="success", summary=summary, data={"sql": sql, "columns": exec_res["columns"], "rows": rows, "truncated": exec_res.get("truncated", False), "redacted": decision.redact}, policy_id=decision.policy_id)

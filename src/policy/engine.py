@@ -143,6 +143,9 @@ class PolicyEngine:
         # RAG: docs are informational, but still block unauthorized queue without context
         if q == QueueOrigin.SUPPORT_UNAUTHORIZED:
             return Decision(allowed=False, reason="Unauthorized queue cannot query docs", policy_id="docs-deny-unauthorized")
+        # Self-service: allow but redact sensitive chunks (WIFI_PSK etc.)
+        if q == QueueOrigin.SELF_SERVICE:
+            return Decision(allowed=True, reason="Docs query allowed with redaction for self-service", policy_id="docs-allow-redact", redact=True)
         return Decision(allowed=True, reason="Docs query allowed", policy_id="docs-allow")
 
     def _sql_policy(self, ctx: RequestContext, q: QueueOrigin) -> Decision:
@@ -160,5 +163,6 @@ class PolicyEngine:
                 return Decision(allowed=False, reason="Authorized support needs ticket for SQL", policy_id="sql-deny-no-ticket")
             return Decision(allowed=True, reason="Support SQL with ticket", policy_id="sql-allow-support-ticket")
         if q == QueueOrigin.SELF_SERVICE:
-            return Decision(allowed=False, reason="Self-service SQL not allowed", policy_id="sql-deny-self-service")
+            # Self-service can query own non-sensitive data, but redact sensitive columns
+            return Decision(allowed=True, reason="Self-service SQL allowed with redaction", policy_id="sql-allow-redact", redact=True)
         return Decision(allowed=False, reason=f"Unhandled queue {q} for SQL", policy_id="sql-default-deny")

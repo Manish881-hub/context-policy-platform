@@ -109,12 +109,18 @@ def get_wifi_credentials_tool(
     try:
         # Adapter does second check — even if this tool's check were bypassed, adapter would still deny.
         creds = adapter.get_wifi_credentials(ctx)
+        psk = creds.psk
+        ssid = creds.ssid
+        if decision.redact:
+            psk = "***REDACTED***"
+            ssid = "***REDACTED***"
+        summary = f"Retrieved wifi for {subscriber_id}" + (" [REDACTED]" if decision.redact else "")
         return ToolResponse(
             status="success",
-            summary=f"Retrieved wifi for {subscriber_id}",
+            summary=summary,
             next_actions=[],
             artifacts=[],
-            data={"subscriber_id": creds.subscriber_id, "ssid": creds.ssid, "psk": creds.psk},
+            data={"subscriber_id": creds.subscriber_id, "ssid": ssid, "psk": psk, "redacted": decision.redact},
             policy_id=decision.policy_id,
         )
     except PermissionError as e:
