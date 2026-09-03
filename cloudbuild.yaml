@@ -1,0 +1,51 @@
+steps:
+  # Install + eval gate (same as GitHub Actions — prompt change flipping auth fails build)
+  - name: 'python:3.11-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install -e ".[dev]" && \
+        python -m src.provisioning.db && \
+        pytest tests/policy tests/provisioning tests/tools -q && \
+        pytest tests/evals -v && \
+        pytest -q --tb=short
+
+  # Build image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/context-policy-platform:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/context-policy-platform:latest'
+      - '.'
+
+  # Push to Artifact Registry (or GCR)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/context-policy-platform:$COMMIT_SHA'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'context-policy-platform'
+      - '--image=gcr.io/$PROJECT_ID/context-policy-platform:$COMMIT_SHA'
+      - '--region=$_REGION'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=PROVISIONING_DB_PATH=/app/src/provisioning/provisioning.db'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--port=8080'
+
+images:
+  - 'gcr.io/$PROJECT_ID/context-policy-platform:$COMMIT_SHA'
+
+substitutions:
+  _REGION: 'asia-south1'  # close to Bhubaneswar; use asia-south1 for low latency
+
+timeout: 600s

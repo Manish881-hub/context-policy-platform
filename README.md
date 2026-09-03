@@ -58,15 +58,32 @@ Authorization evaluated fresh on every tool call from `identity + context`, not 
 4. Evals in CI — `evals/golden.jsonl` + `pytest tests/evals/` + GitHub Action fail on auth miss
 5. RAG + Text-to-SQL — reuse same harness
 
-## Quickstart
+## Quickstart (local)
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest -q                         # all unit
-pytest tests/evals/test_golden.py -v  # auth 100% gate
-python -m src.demo                # manual allow/deny demo
+pytest -q                         # 39 tests: wifi, RAG staleness, SQL guardrails
+pytest tests/evals -v             # golden 100% gate (pass^3=1.0)
+python -m src.demo                # manual: on-site ALLOW vs unauthorized DENY
+# or HTTP (Cloud Run locally):
+pip install -e ".[gcp]" && ./scripts/local_run.sh
 ```
+
+## Deploy to GCP (Python on GCP)
+
+```bash
+export PROJECT_ID=your-gcp-project
+export REGION=asia-south1  # Bhubaneswar close
+# Cloud Build + Cloud Run (eval gate runs in build):
+gcloud builds submit --config cloudbuild.yaml
+# or Terraform:
+cd infra/terraform && terraform init && terraform apply -var="project_id=$PROJECT_ID" -var="image=gcr.io/$PROJECT_ID/context-policy-platform:$(git rev-parse --short HEAD)"
+# or one-liner:
+./scripts/deploy.sh
+```
+
+Endpoints: `GET /health`, `POST /tool/wifi`, `/tool/line-status`, `/tool/docs`, `/tool/sql` — all policy-guarded per-call, adapter double-checked, same `src/policy/engine.py:15` as local.
 
 ## Repo Layout
 

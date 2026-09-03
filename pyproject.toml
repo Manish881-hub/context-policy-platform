@@ -16,6 +16,11 @@ dev = [
     "ruff>=0.3",
     "mypy>=1.8",
 ]
+gcp = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic-settings>=2.0",
+]
 rag = ["chromadb>=0.5", "sentence-transformers>=3.0"]
 sql = ["sqlglot>=24.0"]
 
