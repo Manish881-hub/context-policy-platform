@@ -1,0 +1,16 @@
+Title: ONT Reset Procedure — 2024‑01‑10 (Rev C, Current)
+Doc ID: DOC-2024-ONT-RESET
+Supersedes: DOC-2011-ONT-RESET
+Still Valid As Of: 2024-12-01
+Status: CURRENT — valid as of Dec 2024
+
+Procedure (Current):
+1. Verify technician is on-site via field app check-in + GPS at subscriber SITE.
+2. Call adapter.reset_ont(ctx) — policy checks queue_origin, ticket, site match.
+3. Adapter uses LegacyProtocolWrapper with session token, not raw TL1.
+4. Confirm LINE_STAT via get_line_status before and after.
+5. Log ticket_id and technician_id for audit.
+
+For S123 at SITE_A, OLT-1 v5: use RESET_ONT::OLT-1/ONT-001 via wrapper with policy gate. Old INIT-ONT deprecated.
+
+Tags: ont, reset, current

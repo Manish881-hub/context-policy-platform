@@ -1,0 +1,14 @@
+Title: WiFi Retrieval via Policy Adapter — 2023‑08‑15 (Current)
+Doc ID: DOC-2023-WIFI-API
+Supersedes: DOC-2011-WIFI
+Still Valid As Of: 2024-12-01
+Status: CURRENT
+
+Procedure (Current):
+1. Technician must be field_app with GPS_verified_on_site + field_checkin_active + site_id == subscriber_site_id
+   OR support_authorized with ticket_id.
+2. Call tools.get_wifi_credentials_tool(...) — policy evaluated inside.
+3. Adapter re-checks policy independently (defense in depth).
+4. Never serve WIFI_PSK from direct DB; always via policy-guarded adapter.
+
+Tags: wifi, psk, policy, current

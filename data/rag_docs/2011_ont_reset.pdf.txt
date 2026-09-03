@@ -1,0 +1,15 @@
+Title: ONT Reset Procedure — 2011‑03‑15 (Rev A)
+Doc ID: DOC-2011-ONT-RESET
+Superseded By: DOC-2024-ONT-RESET
+Still Valid As Of: 2011-03-15
+Status: DEPRECATED — do not use TL1 command RTRV-ONT for reset
+
+Procedure (2011):
+1. Connect to OLT via Telnet 23.
+2. Send: RTRV-ONT::ONT-001 — to verify status.
+3. Send: INIT-ONT::ONT-001 — to reset ONT.
+4. Wait 120s. No check for subscriber service type.
+
+Note: For S123 at SITE_A, this 2011 procedure assumes OLD OLT firmware v2. Current OLT-1 runs v5 where INIT-ONT is disabled. Using it returns ERR and may flap.
+
+Tags: ont, reset, telnet, 2011

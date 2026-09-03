@@ -1,4 +1,5 @@
-"""Step 5 stub — RAG over 2011 PDFs with staleness metadata.
+from .store import RagStore
+from .checker import check_conflicts
+from .models import Chunk, RetrievedChunk, RagResult
 
-Hard part isn't embeddings, it's `superseded_by` / `still_valid_as_of` + conflict check vs live state.
-"""
+__all__ = ["RagStore", "check_conflicts", "Chunk", "RetrievedChunk", "RagResult"]

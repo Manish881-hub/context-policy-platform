@@ -1,0 +1,14 @@
+Title: WiFi Credential Retrieval — 2011‑06‑20
+Doc ID: DOC-2011-WIFI
+Superseded By: DOC-2023-WIFI-API
+Still Valid As Of: 2023-01-10
+Status: SUPERSEDED — use API get_wifi_credentials, not direct DB query
+
+Procedure (2011):
+1. Query DB: SELECT WIFI_SSID, WIFI_PSK FROM SUBS_TBL WHERE SUBS_ID='<id>' — direct DB access allowed for any technician.
+2. No check-in or GPS required.
+3. No ticket required.
+
+Warning: This violates current policy (2023). Direct DB path bypasses policy engine. Current live policy requires field_app GPS+checkin OR support_authorized + ticket. Serving 2011 doc as current would leak credentials.
+
+Tags: wifi, psk, database
