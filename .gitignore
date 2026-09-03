@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.vscode/
+*.db
+*.sqlite
+.env
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+
+# local-only docs — kept on disk, not pushed to GitHub (per user request)
+MISSION.md
+RESOURCES.md
+docs/
+reference/
+assets/
+learning-records/
+lessons/
