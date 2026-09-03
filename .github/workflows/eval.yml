@@ -13,7 +13,7 @@ jobs:
       - name: Unit + policy + adapter + tool tests
         run: pytest tests/policy tests/provisioning tests/tools -q
       - name: Golden eval — MUST be 100% for auth (pass^3=1.0)
-        run: pytest tests/evals/test_golden.py -v
+        run: pytest tests/evals -v
       - name: Full suite
         run: pytest -q --tb=short
       - name: Typecheck
