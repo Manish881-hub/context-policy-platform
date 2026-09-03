@@ -18,6 +18,7 @@ from .models import Decision
 def _audit(decision: Decision, ctx: RequestContext, event: str = "policy_decision") -> Decision:
     try:
         from ..observability.audit import audit_log
+        from ..observability.metrics import record_policy
 
         audit_log(
             event=event,
@@ -29,6 +30,7 @@ def _audit(decision: Decision, ctx: RequestContext, event: str = "policy_decisio
             subscriber_id=ctx.resource.subscriber_id,
             action=ctx.action.value,
         )
+        record_policy(decision.policy_id, decision.allowed)
     except Exception:
         pass
     return decision

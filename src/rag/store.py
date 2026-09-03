@@ -81,21 +81,30 @@ def _score(query: str, chunk: Chunk) -> float:
 def _staleness(chunk: Chunk) -> tuple[str, str | None]:
     now = datetime.utcnow().date().isoformat()
     if chunk.deprecated and chunk.superseded_by:
-        return "superseded", f"Deprecated and superseded by {chunk.superseded_by} (valid until {chunk.valid_until})"
-    if chunk.superseded_by:
-        return "stale", f"Superseded by {chunk.superseded_by}"
-    if chunk.deprecated:
-        return "deprecated", "Marked deprecated"
-    # check still_valid_as_of freshness: >1 year old is stale
-    if chunk.still_valid_as_of:
-        try:
-            still = datetime.fromisoformat(chunk.still_valid_as_of).date()
-            age_days = (datetime.utcnow().date() - still).days
-            if age_days > 365:
-                return "stale", f"Last verified {chunk.still_valid_as_of} (>365 days ago)"
-        except Exception:
-            pass
-    return "fresh", None
+        result = ("superseded", f"Deprecated and superseded by {chunk.superseded_by} (valid until {chunk.valid_until})")
+    elif chunk.superseded_by:
+        result = ("stale", f"Superseded by {chunk.superseded_by}")
+    elif chunk.deprecated:
+        result = ("deprecated", "Marked deprecated")
+    else:
+        result = ("fresh", None)
+        # check still_valid_as_of freshness: >1 year old is stale
+        if chunk.still_valid_as_of:
+            try:
+                still = datetime.fromisoformat(chunk.still_valid_as_of).date()
+                age_days = (datetime.utcnow().date() - still).days
+                if age_days > 365:
+                    result = ("stale", f"Last verified {chunk.still_valid_as_of} (>365 days ago)")
+            except Exception:
+                pass
+    # metrics
+    try:
+        from ..observability.metrics import record_staleness
+
+        record_staleness(result[0])
+    except Exception:
+        pass
+    return result
 
 class RagStore:
     def __init__(self, chunks: list[Chunk] | None = None):

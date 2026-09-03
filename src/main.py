@@ -67,6 +67,13 @@ class SqlRequest(BaseModel):
 def health() -> dict[str, Any]:
     return {"status": "ok", "version": "0.1.0", "policy": "per-tool-call", "db": str(_effective_db)}
 
+
+@app.get("/metrics")
+def metrics() -> dict[str, Any]:
+    from .observability.metrics import get_metrics
+
+    return {"metrics": get_metrics()}
+
 @app.post("/tool/wifi")
 def tool_wifi(req: WifiRequest) -> dict[str, Any]:
     resp = get_wifi_credentials_tool(

@@ -21,13 +21,37 @@ MAX_SQL_LEN = 2000
 
 def validate_sql(sql: str) -> tuple[bool, str]:
     if len(sql) > MAX_SQL_LEN:
+        try:
+            from ..observability.metrics import record_guardrail
+
+            record_guardrail(True)
+        except Exception:
+            pass
         return False, f"SQL too long (> {MAX_SQL_LEN})"
     upper = sql.upper().strip()
     if not upper.startswith("SELECT"):
+        try:
+            from ..observability.metrics import record_guardrail
+
+            record_guardrail(True)
+        except Exception:
+            pass
         return False, "Only SELECT allowed (read-only)"
     for pat in DENY_PATTERNS:
         if re.search(pat, upper, re.IGNORECASE):
+            try:
+                from ..observability.metrics import record_guardrail
+
+                record_guardrail(True)
+            except Exception:
+                pass
             return False, f"Denied pattern matched: {pat}"
+    try:
+        from ..observability.metrics import record_guardrail
+
+        record_guardrail(False)
+    except Exception:
+        pass
     return True, "ok"
 
 def ensure_limit(sql: str, limit: int = MAX_ROWS) -> str:
