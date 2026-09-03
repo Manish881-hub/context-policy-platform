@@ -30,6 +30,12 @@ class PolicyEngine:
         if action == Action.GET_LINE_STATUS:
             return self._line_status_policy(ctx, q)
 
+        if action == Action.QUERY_DOCS:
+            return self._docs_policy(ctx, q)
+
+        if action == Action.QUERY_SQL:
+            return self._sql_policy(ctx, q)
+
         # Default deny for unknown sensitive actions
         return Decision(
             allowed=False,
@@ -113,3 +119,27 @@ class PolicyEngine:
             reason="Line status allowed for verified queue",
             policy_id="line-allow",
         )
+
+    def _docs_policy(self, ctx: RequestContext, q: QueueOrigin) -> Decision:
+        # RAG: docs are informational, but still block unauthorized queue without context
+        if q == QueueOrigin.SUPPORT_UNAUTHORIZED:
+            return Decision(allowed=False, reason="Unauthorized queue cannot query docs", policy_id="docs-deny-unauthorized")
+        return Decision(allowed=True, reason="Docs query allowed", policy_id="docs-allow")
+
+    def _sql_policy(self, ctx: RequestContext, q: QueueOrigin) -> Decision:
+        # SQL: sensitive — same strictness as wifi because it can exfiltrate PSK etc.
+        if q == QueueOrigin.SUPPORT_UNAUTHORIZED:
+            return Decision(allowed=False, reason="Unauthorized queue cannot query database", policy_id="sql-deny-unauthorized-queue")
+        if q == QueueOrigin.FIELD_APP:
+            if not ctx.field_checkin_active or not ctx.gps_verified_on_site:
+                return Decision(allowed=False, reason="Field app needs active check-in + GPS for SQL", policy_id="sql-deny-no-checkin")
+            if ctx.site_id and ctx.subscriber_site_id and ctx.site_id != ctx.subscriber_site_id:
+                return Decision(allowed=False, reason="Site mismatch for SQL", policy_id="sql-deny-site-mismatch")
+            return Decision(allowed=True, reason="Field SQL allowed", policy_id="sql-allow-field-onsite")
+        if q == QueueOrigin.SUPPORT_AUTHORIZED:
+            if not ctx.ticket_id:
+                return Decision(allowed=False, reason="Authorized support needs ticket for SQL", policy_id="sql-deny-no-ticket")
+            return Decision(allowed=True, reason="Support SQL with ticket", policy_id="sql-allow-support-ticket")
+        if q == QueueOrigin.SELF_SERVICE:
+            return Decision(allowed=False, reason="Self-service SQL not allowed", policy_id="sql-deny-self-service")
+        return Decision(allowed=False, reason=f"Unhandled queue {q} for SQL", policy_id="sql-default-deny")

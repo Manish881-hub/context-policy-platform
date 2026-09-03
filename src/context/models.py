@@ -24,6 +24,8 @@ class Action(str, Enum):
     GET_LINE_STATUS = "get_line_status"
     GET_SUBSCRIBER_PROFILE = "get_subscriber_profile"
     RESET_ONT = "reset_ont"
+    QUERY_DOCS = "query_docs"
+    QUERY_SQL = "query_sql"
 
 
 class Resource(BaseModel):
