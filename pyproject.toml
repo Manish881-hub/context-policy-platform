@@ -21,8 +21,10 @@ gcp = [
     "uvicorn[standard]>=0.29",
     "pydantic-settings>=2.0",
 ]
-rag = ["chromadb>=0.5", "sentence-transformers>=3.0"]
+rag = ["chromadb>=0.5", "sentence-transformers>=3.0", "pypdf>=4.0"]
 sql = ["sqlglot>=24.0"]
+db = ["psycopg[binary]>=3.1"]
+prod = ["pypdf>=4.0", "sqlglot>=24.0", "psycopg[binary]>=3.1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from pydantic import BaseModel
 
-from ..provisioning.db import get_connection, DB_PATH
+from ..provisioning.db import get_connection, run, DB_PATH
 
 # Human-annotated pass — the one expensive step nobody wants to do but makes accuracy jump.
 # In prod, this JSON is maintained by senior engineer who reverse-engineered 2009 system.
@@ -52,20 +52,30 @@ class SemanticLayer:
         conn = get_connection(self.db_path)
         try:
             # ensure DB exists
-            conn.execute("SELECT 1 FROM SUBS_TBL LIMIT 1")
+            run(conn, "SELECT 1 FROM SUBS_TBL LIMIT 1")
         except Exception:
             conn.close()
             from ..provisioning.db import init_db
             init_db(self.db_path)
             conn = get_connection(self.db_path)
 
+        from ..provisioning.db import is_postgres
+
         result: dict = {}
         for table in ["SUBS_TBL", "TICK_TBL"]:
-            cur = conn.execute(f"PRAGMA table_info({table})")
-            cols = cur.fetchall()
+            if is_postgres():
+                cur = run(conn, "SELECT column_name AS name FROM information_schema.columns WHERE table_name=%s ORDER BY ordinal_position", (table.lower(),))
+                # fallback: try upper too (legacy cryptic names are upper)
+                cols = cur.fetchall()
+                if not cols:
+                    cur = run(conn, "SELECT column_name AS name FROM information_schema.columns WHERE table_name=%s ORDER BY ordinal_position", (table,))
+                    cols = cur.fetchall()
+            else:
+                cur = conn.execute(f"PRAGMA table_info({table})")
+                cols = cur.fetchall()
             # sample 2 rows
             try:
-                sample_cur = conn.execute(f"SELECT * FROM {table} LIMIT 2")
+                sample_cur = run(conn, f"SELECT * FROM {table} LIMIT 2")
                 rows = sample_cur.fetchall()
             except Exception:
                 rows = []

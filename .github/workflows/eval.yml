@@ -8,12 +8,16 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests || true
       - name: Init provisioning DB
         run: python -m src.provisioning.db
       - name: Unit + policy + adapter + tool tests
-        run: pytest tests/policy tests/provisioning tests/tools -q
+        run: pytest tests/policy tests/provisioning tests/tools tests/context -q
       - name: Golden eval — MUST be 100% for auth (pass^3=1.0)
         run: pytest tests/evals -v
+      - name: Prod evals (JWT, timeout, OPA parity, PDF ingest)
+        run: pytest tests/prod -v
       - name: Full suite
         run: pytest -q --tb=short
       - name: Typecheck

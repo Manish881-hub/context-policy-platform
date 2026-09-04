@@ -1,18 +1,34 @@
-"""RAG store — chunks + staleness, not just embeddings.
+"""RAG store — chunks + staleness + iterative retrieval.
 
-We keep this dependency-light (no chromadb download in CI). Simple TF overlap scoring
-+ metadata-aware ranking. Swap to chromadb/sentence-transformers later behind same interface:
-  store.search(query) -> list[RetrievedChunk] with staleness already attached.
+ECC iterative-retrieval (DISPATCH→EVALUATE→REFINE→LOOP, max 3):
+- Cycle 1 DISPATCH: broad TF + hash-embedding cosine (stdlib, no torch).
+- EVALUATE: score relevance 0-1, flag staleness before LLM sees it.
+- REFINE: extract terminology from top hit (e.g. codebase says INIT-ONT vs RESET_ONT),
+  add to query, exclude confirmed-irrelevant docs.
+- LOOP max 3, return fresh-first.
 
-Key: every chunk carries superseded_by / still_valid_as_of; store flags stale before it reaches LLM.
+ECC python-patterns: EAFP (try chromadb/pypdf, fall back to stdlib/txt so CI stays green).
+Production: drop real .pdf files into data/rag_docs/ + set EMBEDDINGS_BACKEND=chromadb;
+interface store.search(query) is unchanged.
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from datetime import datetime
 
 from .models import Chunk, RetrievedChunk, RagResult
+
+try:
+    from .embeddings import embed, cosine
+except Exception:  # pragma: no cover
+
+    def embed(text: str, dim: int = 64) -> list[float]:  # type: ignore
+        return [0.0] * dim
+
+    def cosine(a: list[float], b: list[float]) -> float:  # type: ignore
+        return 0.0
 
 DATA_DIR = Path(__file__).parents[2] / "data" / "rag_docs"
 
@@ -71,12 +87,28 @@ SEED_CHUNKS: list[Chunk] = [
 ]
 
 def _score(query: str, chunk: Chunk) -> float:
-    # naive token overlap — deterministic, no model download
+    # Cycle-1 score: 0.7 * TF overlap + 0.3 * hash-embedding cosine.
+    # Deterministic, no model download; chromadb backend can replace embed() later.
     q = set(re.findall(r"\w+", query.lower()))
     t = set(re.findall(r"\w+", (chunk.title + " " + chunk.text).lower()))
     if not q:
         return 0.0
-    return len(q & t) / len(q)
+    tf = len(q & t) / len(q)
+    try:
+        emb = cosine(embed(query), embed(chunk.title + " " + chunk.text))
+        # cosine in [-1,1] for normalized vectors in [0,1]; clamp
+        emb = max(0.0, min(1.0, emb))
+    except Exception:
+        emb = 0.0
+    return 0.7 * tf + 0.3 * emb
+
+
+def _extract_keywords(text: str, known: set[str] | None = None) -> set[str]:
+    """REFINE helper: learn codebase terminology from top hit (e.g. INIT-ONT, OLT-1)."""
+    toks = set(re.findall(r"[A-Za-z]+(?:-[A-Za-z0-9]+)+|\w{4,}", text.upper()))
+    if known:
+        toks -= {k.upper() for k in known}
+    return {t.lower() for t in toks if len(t) > 3} - {"with", "from", "this", "that"}
 
 def _staleness(chunk: Chunk) -> tuple[str, str | None]:
     now = datetime.utcnow().date().isoformat()
@@ -107,20 +139,58 @@ def _staleness(chunk: Chunk) -> tuple[str, str | None]:
     return result
 
 class RagStore:
-    def __init__(self, chunks: list[Chunk] | None = None):
-        self.chunks = chunks or SEED_CHUNKS
+    def __init__(self, chunks: list[Chunk] | None = None, use_disk: bool = False):
+        if chunks is not None:
+            self.chunks = chunks
+        elif use_disk or os.getenv("RAG_USE_DISK") == "1":
+            # Production: ingest real PDFs when present, .txt fallback otherwise.
+            try:
+                from .pdf_ingest import ingest_dir
 
-    def search(self, query: str, top_k: int = 3, include_stale: bool = False) -> RagResult:
+                disk = ingest_dir()
+                self.chunks = disk or SEED_CHUNKS
+            except Exception:
+                self.chunks = SEED_CHUNKS
+        else:
+            self.chunks = SEED_CHUNKS
+
+    def _one_pass(self, query: str) -> list[tuple[float, Chunk]]:
         scored: list[tuple[float, Chunk]] = [(_score(query, c), c) for c in self.chunks]
         scored.sort(key=lambda x: x[0], reverse=True)
+        return scored
+
+    def search(self, query: str, top_k: int = 3, include_stale: bool = False) -> RagResult:
+        # Iterative retrieval: max 3 cycles DISPATCH→EVALUATE→REFINE.
+        best: dict[str, tuple[float, Chunk]] = {}
+        cur_query = query
+        seen_terms = set(re.findall(r"\w+", query.lower()))
+        for _cycle in range(3):
+            scored = self._one_pass(cur_query)
+            # EVALUATE: keep anything with signal
+            candidates = [(s, c) for s, c in scored if s > 0][:top_k]
+            if not candidates:
+                break
+            for s, c in candidates:
+                if c.chunk_id not in best or s > best[c.chunk_id][0]:
+                    best[c.chunk_id] = (s, c)
+            # Stop at "good enough": 2+ fresh-ish hits with score >= 0.25
+            fresh_hits = sum(1 for s, _ in candidates if s >= 0.25)
+            if fresh_hits >= 2:
+                break
+            # REFINE: learn terminology from top hit, expand query
+            top_chunk = candidates[0][1]
+            new_terms = _extract_keywords(top_chunk.title + " " + top_chunk.text, seen_terms)
+            if not new_terms:
+                break
+            seen_terms |= new_terms
+            cur_query = cur_query + " " + " ".join(sorted(new_terms)[:5])
+        scored = sorted(best.values(), key=lambda x: x[0], reverse=True)
         results: list[RetrievedChunk] = []
         warnings: list[str] = []
         for score, chunk in scored[:top_k]:
             if score == 0:
                 continue
             staleness, reason = _staleness(chunk)
-            # by default, demote superseded/deprecated to bottom but still return with warning
-            # if include_stale False, we still return but flagged — caller must not serve stale as current
             rc = RetrievedChunk(
                 **chunk.model_dump(),
                 score=score,

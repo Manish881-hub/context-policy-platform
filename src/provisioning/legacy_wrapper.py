@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from .db import get_connection, DB_PATH
+from .db import get_connection, run, DB_PATH
 
 
 class LegacyProtocolError(RuntimeError):
@@ -95,7 +95,7 @@ class LegacyProtocolWrapper:
     def _get_wifi(self, subs_id: str) -> bytes:
         conn = get_connection(self.db_path)
         try:
-            cur = conn.execute("SELECT WIFI_SSID, WIFI_PSK FROM SUBS_TBL WHERE SUBS_ID=?", (subs_id,))
+            cur = run(conn, "SELECT WIFI_SSID, WIFI_PSK FROM SUBS_TBL WHERE SUBS_ID=?", (subs_id,))
             row = cur.fetchone()
             if not row:
                 return b"ERR|subscriber not found"
@@ -107,7 +107,7 @@ class LegacyProtocolWrapper:
     def _get_line(self, subs_id: str) -> bytes:
         conn = get_connection(self.db_path)
         try:
-            cur = conn.execute("SELECT LINE_STAT, OLT_ID, ONT_SN FROM SUBS_TBL WHERE SUBS_ID=?", (subs_id,))
+            cur = run(conn, "SELECT LINE_STAT, OLT_ID, ONT_SN FROM SUBS_TBL WHERE SUBS_ID=?", (subs_id,))
             row = cur.fetchone()
             if not row:
                 return b"ERR|subscriber not found"
@@ -118,8 +118,7 @@ class LegacyProtocolWrapper:
     def _get_profile(self, subs_id: str) -> bytes:
         conn = get_connection(self.db_path)
         try:
-            cur = conn.execute(
-                "SELECT SUBS_ID, SITE_CD, ONT_SN, WIFI_SSID, LINE_STAT, OLT_ID FROM SUBS_TBL WHERE SUBS_ID=?",
+            cur = run(conn, "SELECT SUBS_ID, SITE_CD, ONT_SN, WIFI_SSID, LINE_STAT, OLT_ID FROM SUBS_TBL WHERE SUBS_ID=?",
                 (subs_id,),
             )
             row = cur.fetchone()
@@ -133,13 +132,13 @@ class LegacyProtocolWrapper:
     def _reset_ont(self, subs_id: str) -> bytes:
         conn = get_connection(self.db_path)
         try:
-            cur = conn.execute("SELECT ONT_SN, OLT_ID, LINE_STAT FROM SUBS_TBL WHERE SUBS_ID=?", (subs_id,))
+            cur = run(conn, "SELECT ONT_SN, OLT_ID, LINE_STAT FROM SUBS_TBL WHERE SUBS_ID=?", (subs_id,))
             row = cur.fetchone()
             if not row:
                 return b"ERR|subscriber not found"
             ont_sn = row["ONT_SN"]
             # Simulate 2009 TL1 INIT-ONT: flap DOWN then UP. We set UP to show effect.
-            conn.execute("UPDATE SUBS_TBL SET LINE_STAT='UP' WHERE SUBS_ID=?", (subs_id,))
+            run(conn, "UPDATE SUBS_TBL SET LINE_STAT='UP' WHERE SUBS_ID=?", (subs_id,))
             conn.commit()
             return f"OK|{ont_sn}|RESET_INITIATED".encode()
         finally:
@@ -148,7 +147,7 @@ class LegacyProtocolWrapper:
     def _get_olt_subs(self, olt_id: str) -> bytes:
         conn = get_connection(self.db_path)
         try:
-            cur = conn.execute("SELECT SUBS_ID, LINE_STAT FROM SUBS_TBL WHERE OLT_ID=?", (olt_id,))
+            cur = run(conn, "SELECT SUBS_ID, LINE_STAT FROM SUBS_TBL WHERE OLT_ID=?", (olt_id,))
             rows = cur.fetchall()
             if not rows:
                 return b"ERR|olt not found"

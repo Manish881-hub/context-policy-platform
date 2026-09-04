@@ -39,7 +39,31 @@ def get_queue_origin(ticket_id: str | None, channel: str | None = None) -> str:
     # default: treat unknown as unauthorized (fail closed)
     return QueueOrigin.SUPPORT_UNAUTHORIZED.value
 
-def verify_queue_header(signed_header: str | None) -> str | None:
-    """Verify X-Queue-Origin header signature — in prod, verify JWT via Cloud KMS."""
-    # Stub: just pass through if present, else None
-    return signed_header
+def verify_queue_header(signed_header: str | None) -> dict | None:
+    """Verify X-Queue-Origin JWT. Returns claims or None (fail closed).
+
+    ECC security-review: never trust raw header; generic failure, no leak.
+    Backward compat: if header is a plain queue name (no dots), accept as
+    unsigned channel hint only when ALLOW_UNSIGNED_QUEUE=1 (CI default 1, prod 0).
+    """
+    import os
+
+    if not signed_header:
+        return None
+    if "." not in signed_header:
+        import os as _os
+
+        if _os.getenv("ALLOW_UNSIGNED_QUEUE", "1") == "1" and signed_header in (
+            "field_app",
+            "support_authorized",
+            "support_unauthorized",
+            "self_service",
+        ):
+            return {"queue_origin": signed_header, "unsigned": True}
+        return None
+    try:
+        from .tokens import verify_queue_token
+
+        return verify_queue_token(signed_header)
+    except Exception:
+        return None

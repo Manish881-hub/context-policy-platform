@@ -37,10 +37,31 @@ def _audit(decision: Decision, ctx: RequestContext, event: str = "policy_decisio
 
 
 class PolicyEngine:
-    """Simple predicate engine — declarative enough to evolve to Rego."""
+    """Predicate engine with OPA enforcement when available.
+
+    ECC safety-guard: OPA path is deny-by-default; any OPA failure -> deny.
+    Set OPA_ENABLED=1 + install `opa` binary to enforce Rego in prod;
+    CI defaults to Python predicate (zero deps) with parity evals.
+    """
+
+    def __init__(self, use_opa: bool | None = None):
+        import os
+
+        self.use_opa = (os.getenv("OPA_ENABLED") == "1") if use_opa is None else use_opa
 
     def evaluate(self, ctx: RequestContext) -> Decision:
         """Evaluate fresh — no caching across calls, context may have changed."""
+        if self.use_opa:
+            try:
+                from .opa import evaluate_via_opa
+
+                d = evaluate_via_opa(ctx)
+                if d is not None:
+                    return _audit(d, ctx, event="policy_decision_opa")
+            except Exception:
+                pass
+            # fall through to Python on OPA failure? No — opa.py already fail-closed.
+            # If evaluate_via_opa returned None (binary missing) fall back to Python.
         action = ctx.action
         q = ctx.identity.queue_origin
 

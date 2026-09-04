@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..provisioning.db import get_connection
+from ..provisioning.db import get_connection, run
 from .models import RetrievedChunk
 
 # Simple heuristics for demo — in prod, compare structured procedure fields to live telemetry.
@@ -19,7 +19,7 @@ def check_conflicts(chunks: list[RetrievedChunk], subscriber_id: str | None = No
     live = None
     try:
         conn = get_connection(db_path)
-        cur = conn.execute("SELECT SITE_CD, OLT_ID, LINE_STAT FROM SUBS_TBL WHERE SUBS_ID=?", (subscriber_id,))
+        cur = run(conn, "SELECT SITE_CD, OLT_ID, LINE_STAT FROM SUBS_TBL WHERE SUBS_ID=?", (subscriber_id,))
         row = cur.fetchone()
         conn.close()
         if row:

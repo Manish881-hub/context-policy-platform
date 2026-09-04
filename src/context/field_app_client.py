@@ -1,14 +1,12 @@
 """Field app GPS/check-in ingestion — trusted signal, not LLM inference.
 
-In prod: field app (Android/iOS) posts GPS + site check-in to Cloud Run/Cloud Functions,
-which verifies via: (1) signed JWT with technician_id + site_id + timestamp, (2) GPS fence check
-against subscriber SITE_CD geofence, (3) active session lookup in Firestore/Cloud SQL.
-
-If agent decided authorization from what user *says* (\"I'm at SITE_A\"), a bad actor spoofs it.
-This module shows the correct ingestion path: context comes from systems, not conversation.
+ECC security-review + fastapi-patterns: signed JWT (HS256, env secret, expiry),
+haversine geofence vs site coords, fail closed. Mock store kept for CI.
 """
 from __future__ import annotations
 
+import math
+import os
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 
@@ -51,5 +49,63 @@ def get_field_checkin(technician_id: str) -> FieldCheckIn | None:
     return ci
 
 def verify_gps(site_id: str, subscriber_site_id: str) -> bool:
-    """Geofence check — in prod, compare GPS coords against site polygon via Maps API."""
+    """Legacy site-code match (kept for backward compat)."""
     return site_id == subscriber_site_id
+
+
+# Production geofence: site coords (Bhubaneswar area demo) + 500m radius.
+SITE_COORDS: dict[str, tuple[float, float]] = {
+    "SITE_A": (20.2961, 85.8245),
+    "SITE_B": (20.3010, 85.8300),
+    "SITE_X": (20.3100, 85.8400),
+}
+GEOFENCE_RADIUS_M = float(os.getenv("GEOFENCE_RADIUS_M", "500"))
+
+
+def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlmb = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def verify_gps_coords(lat: float, lon: float, site_id: str) -> bool:
+    """True if (lat,lon) within GEOFENCE_RADIUS_M of site center."""
+    center = SITE_COORDS.get(site_id)
+    if not center:
+        return False
+    try:
+        return haversine_m(lat, lon, center[0], center[1]) <= GEOFENCE_RADIUS_M
+    except Exception:
+        return False
+
+
+def get_checkin_from_token(field_token: str | None) -> FieldCheckIn | None:
+    """Verify signed field JWT -> FieldCheckIn. Returns None on any failure (fail closed)."""
+    if not field_token:
+        return None
+    try:
+        from .tokens import verify_field_token
+
+        claims = verify_field_token(field_token)
+        tech = str(claims.get("technician_id", ""))
+        site = str(claims.get("site_id", ""))
+        lat = float(claims.get("lat", 0.0))
+        lon = float(claims.get("lon", 0.0))
+        if not tech or not site:
+            return None
+        gps_ok = verify_gps_coords(lat, lon, site)
+        now = datetime.now(timezone.utc)
+        return FieldCheckIn(
+            technician_id=tech,
+            site_id=site,
+            gps_verified_on_site=gps_ok,
+            field_checkin_active=gps_ok,  # active only if inside fence
+            checked_in_at=now,
+            expires_at=datetime.fromtimestamp(float(claims.get("exp", 0)), tz=timezone.utc),
+            verified_by="field_jwt",
+        )
+    except Exception:
+        return None
