@@ -49,6 +49,12 @@ class PolicyEngine:
             return _audit(self._wifi_policy(ctx, q), ctx)
         if action == Action.GET_LINE_STATUS:
             return _audit(self._line_status_policy(ctx, q), ctx)
+        if action == Action.GET_SUBSCRIBER_PROFILE:
+            return _audit(self._profile_policy(ctx, q), ctx)
+        if action == Action.RESET_ONT:
+            return _audit(self._reset_policy(ctx, q), ctx)
+        if action == Action.GET_OLT_SUBSCRIBERS:
+            return _audit(self._olt_policy(ctx, q), ctx)
         if action == Action.QUERY_DOCS:
             return _audit(self._docs_policy(ctx, q), ctx)
         if action == Action.QUERY_SQL:
@@ -140,6 +146,42 @@ class PolicyEngine:
             reason="Line status allowed for verified queue",
             policy_id="line-allow",
         )
+
+    def _profile_policy(self, ctx: RequestContext, q: QueueOrigin) -> Decision:
+        # Profile has no PSK — same sensitivity as line_status
+        if q == QueueOrigin.SUPPORT_UNAUTHORIZED:
+            return Decision(allowed=False, reason="Unauthorized queue cannot query profile", policy_id="profile-deny-unauthorized")
+        if q == QueueOrigin.SELF_SERVICE:
+            return Decision(allowed=True, reason="Self-service profile allowed with redaction", policy_id="profile-allow-redact", redact=True)
+        return Decision(allowed=True, reason="Profile allowed for verified queue", policy_id="profile-allow")
+
+    def _reset_policy(self, ctx: RequestContext, q: QueueOrigin) -> Decision:
+        # RESET is a write — strict like wifi, plus ticket required even for field (audit trail)
+        if q == QueueOrigin.SUPPORT_UNAUTHORIZED:
+            return Decision(allowed=False, reason="Unauthorized queue cannot reset ONT", policy_id="reset-deny-unauthorized-queue")
+        if q == QueueOrigin.FIELD_APP:
+            if not ctx.field_checkin_active:
+                return Decision(allowed=False, reason="Field check-in not active for reset", policy_id="reset-deny-no-checkin")
+            if not ctx.gps_verified_on_site:
+                return Decision(allowed=False, reason="GPS not verified for reset", policy_id="reset-deny-gps")
+            if ctx.site_id and ctx.subscriber_site_id and ctx.site_id != ctx.subscriber_site_id:
+                return Decision(allowed=False, reason=f"Site mismatch for reset: {ctx.site_id} vs {ctx.subscriber_site_id}", policy_id="reset-deny-site-mismatch")
+            if not ctx.ticket_id:
+                return Decision(allowed=False, reason="Reset requires ticket_id even on-site", policy_id="reset-deny-no-ticket")
+            return Decision(allowed=True, reason="Field reset allowed with ticket", policy_id="reset-allow-field-onsite")
+        if q == QueueOrigin.SUPPORT_AUTHORIZED:
+            if not ctx.ticket_id:
+                return Decision(allowed=False, reason="Authorized support requires ticket for reset", policy_id="reset-deny-no-ticket")
+            return Decision(allowed=True, reason="Support reset with ticket", policy_id="reset-allow-support-ticket")
+        if q == QueueOrigin.SELF_SERVICE:
+            return Decision(allowed=False, reason="Self-service cannot reset ONT", policy_id="reset-deny-self-service")
+        return Decision(allowed=False, reason=f"Unhandled queue {q} for reset", policy_id="reset-default-deny")
+
+    def _olt_policy(self, ctx: RequestContext, q: QueueOrigin) -> Decision:
+        # Aggregate, no PSK — like line_status
+        if q == QueueOrigin.SUPPORT_UNAUTHORIZED:
+            return Decision(allowed=False, reason="Unauthorized queue cannot query OLT", policy_id="olt-deny-unauthorized")
+        return Decision(allowed=True, reason="OLT query allowed", policy_id="olt-allow")
 
     def _docs_policy(self, ctx: RequestContext, q: QueueOrigin) -> Decision:
         # RAG: docs are informational, but still block unauthorized queue without context

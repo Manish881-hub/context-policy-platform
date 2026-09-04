@@ -29,7 +29,7 @@ def test_golden_case(case):
         technician_id=ctx_kwargs.get("technician_id"),
         queue_origin=QueueOrigin(ctx_kwargs["queue_origin"]),
     )
-    resource = Resource(subscriber_id=ctx_kwargs["subscriber_id"])
+    resource = Resource(subscriber_id=ctx_kwargs.get("subscriber_id", "S123"), olt_id=ctx_kwargs.get("olt_id"))
     action = Action(case["action"])
     req = RequestContext(
         identity=identity,

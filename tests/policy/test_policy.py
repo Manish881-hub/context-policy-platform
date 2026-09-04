@@ -59,3 +59,21 @@ def test_line_status_unauthorized_denied():
 def test_line_status_field_allowed():
     c = ctx(QueueOrigin.FIELD_APP, gps=True, checkin=True, action=Action.GET_LINE_STATUS)
     assert engine.evaluate(c).allowed is True
+
+def test_profile_field_allowed():
+    c = ctx(QueueOrigin.FIELD_APP, gps=True, checkin=True, action=Action.GET_SUBSCRIBER_PROFILE)
+    d = engine.evaluate(c)
+    assert d.allowed is True
+    assert d.policy_id == "profile-allow"
+
+def test_reset_needs_ticket_even_onsite():
+    c = ctx(QueueOrigin.FIELD_APP, gps=True, checkin=True, ticket=None, action=Action.RESET_ONT)
+    d = engine.evaluate(c)
+    assert d.allowed is False
+    assert "ticket" in d.reason.lower()
+    c2 = ctx(QueueOrigin.FIELD_APP, gps=True, checkin=True, ticket="TICK-42", action=Action.RESET_ONT)
+    assert engine.evaluate(c2).allowed is True
+
+def test_olt_unauthorized_denied():
+    c = ctx(QueueOrigin.SUPPORT_UNAUTHORIZED, action=Action.GET_OLT_SUBSCRIBERS)
+    assert engine.evaluate(c).allowed is False

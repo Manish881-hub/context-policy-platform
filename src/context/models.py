@@ -24,13 +24,14 @@ class Action(str, Enum):
     GET_LINE_STATUS = "get_line_status"
     GET_SUBSCRIBER_PROFILE = "get_subscriber_profile"
     RESET_ONT = "reset_ont"
+    GET_OLT_SUBSCRIBERS = "get_olt_subscribers"
     QUERY_DOCS = "query_docs"
     QUERY_SQL = "query_sql"
 
 
 class Resource(BaseModel):
     subscriber_id: str = Field(description="Subscriber whose resource is requested")
-    # extensible: add olt_id, ont_serial later
+    olt_id: str | None = Field(default=None, description="OLT id for aggregate queries")
 
 
 class Identity(BaseModel):

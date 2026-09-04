@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from .context.models import Action, Identity, QueueOrigin, RequestContext, Resource
 from .policy.engine import PolicyEngine
 from .tools.wifi_tool import get_wifi_credentials_tool, get_line_status_tool
+from .tools.provisioning_tools import get_subscriber_profile_tool, reset_ont_tool, get_olt_subscribers_tool
 from .tools.rag_tool import query_docs_tool
 from .tools.sql_tool import query_sql_tool
 from .provisioning.db import DB_PATH, init_db
@@ -56,6 +57,40 @@ class RagRequest(BaseModel):
 class SqlRequest(BaseModel):
     nl_query: str
     subscriber_id: str | None = None
+    queue_origin: str = "field_app"
+    gps_verified_on_site: bool = False
+    field_checkin_active: bool = False
+    site_id: str | None = None
+    subscriber_site_id: str | None = None
+    ticket_id: str | None = None
+
+
+class ProfileRequest(BaseModel):
+    subscriber_id: str
+    technician_id: str | None = None
+    queue_origin: str = "field_app"
+    gps_verified_on_site: bool = False
+    field_checkin_active: bool = False
+    site_id: str | None = None
+    subscriber_site_id: str | None = None
+    ticket_id: str | None = None
+
+
+class ResetRequest(BaseModel):
+    subscriber_id: str
+    technician_id: str | None = None
+    queue_origin: str = "field_app"
+    gps_verified_on_site: bool = False
+    field_checkin_active: bool = False
+    site_id: str | None = None
+    subscriber_site_id: str | None = None
+    ticket_id: str | None = None
+
+
+class OltRequest(BaseModel):
+    olt_id: str = "OLT-1"
+    subscriber_id: str = "S123"
+    technician_id: str | None = None
     queue_origin: str = "field_app"
     gps_verified_on_site: bool = False
     field_checkin_active: bool = False
@@ -107,6 +142,30 @@ def tool_line(req: WifiRequest) -> dict[str, Any]:
     if resp.status == "error":
         raise HTTPException(status_code=403 if "DENIED" in resp.summary else 400, detail=resp.model_dump())
     return resp.model_dump()
+
+@app.post("/tool/profile")
+def tool_profile(req: ProfileRequest) -> dict[str, Any]:
+    resp = get_subscriber_profile_tool(**req.model_dump(), db_path=_effective_db)
+    if resp.status == "error":
+        raise HTTPException(status_code=403 if "DENIED" in resp.summary else 400, detail=resp.model_dump())
+    return resp.model_dump()
+
+
+@app.post("/tool/reset-ont")
+def tool_reset(req: ResetRequest) -> dict[str, Any]:
+    resp = reset_ont_tool(**req.model_dump(), db_path=_effective_db)
+    if resp.status == "error":
+        raise HTTPException(status_code=403 if "DENIED" in resp.summary else 400, detail=resp.model_dump())
+    return resp.model_dump()
+
+
+@app.post("/tool/olt-subscribers")
+def tool_olt(req: OltRequest) -> dict[str, Any]:
+    resp = get_olt_subscribers_tool(**req.model_dump(), db_path=_effective_db)
+    if resp.status == "error":
+        raise HTTPException(status_code=403 if "DENIED" in resp.summary else 400, detail=resp.model_dump())
+    return resp.model_dump()
+
 
 @app.post("/tool/docs")
 def tool_docs(req: RagRequest) -> dict[str, Any]:

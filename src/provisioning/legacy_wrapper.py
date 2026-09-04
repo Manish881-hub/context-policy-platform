@@ -71,6 +71,24 @@ class LegacyProtocolWrapper:
             subs_id, token = parts[1], parts[2].encode()
             self._require_session(token)
             return self._get_line(subs_id)
+        elif cmd == "GET_PROFILE":
+            if len(parts) != 3:
+                return b"ERR|GET_PROFILE requires SUBS_ID|TOKEN"
+            subs_id, token = parts[1], parts[2].encode()
+            self._require_session(token)
+            return self._get_profile(subs_id)
+        elif cmd == "RESET_ONT":
+            if len(parts) != 3:
+                return b"ERR|RESET_ONT requires SUBS_ID|TOKEN"
+            subs_id, token = parts[1], parts[2].encode()
+            self._require_session(token)
+            return self._reset_ont(subs_id)
+        elif cmd == "GET_OLT_SUBS":
+            if len(parts) != 3:
+                return b"ERR|GET_OLT_SUBS requires OLT_ID|TOKEN"
+            olt_id, token = parts[1], parts[2].encode()
+            self._require_session(token)
+            return self._get_olt_subs(olt_id)
         else:
             return b"ERR|unknown cmd"
 
@@ -94,5 +112,48 @@ class LegacyProtocolWrapper:
             if not row:
                 return b"ERR|subscriber not found"
             return f"OK|{row['LINE_STAT']}|{row['OLT_ID']}|{row['ONT_SN']}".encode()
+        finally:
+            conn.close()
+
+    def _get_profile(self, subs_id: str) -> bytes:
+        conn = get_connection(self.db_path)
+        try:
+            cur = conn.execute(
+                "SELECT SUBS_ID, SITE_CD, ONT_SN, WIFI_SSID, LINE_STAT, OLT_ID FROM SUBS_TBL WHERE SUBS_ID=?",
+                (subs_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return b"ERR|subscriber not found"
+            # OK|SUBS_ID|SITE_CD|ONT_SN|WIFI_SSID|LINE_STAT|OLT_ID (no PSK on purpose)
+            return f"OK|{row['SUBS_ID']}|{row['SITE_CD']}|{row['ONT_SN']}|{row['WIFI_SSID']}|{row['LINE_STAT']}|{row['OLT_ID']}".encode()
+        finally:
+            conn.close()
+
+    def _reset_ont(self, subs_id: str) -> bytes:
+        conn = get_connection(self.db_path)
+        try:
+            cur = conn.execute("SELECT ONT_SN, OLT_ID, LINE_STAT FROM SUBS_TBL WHERE SUBS_ID=?", (subs_id,))
+            row = cur.fetchone()
+            if not row:
+                return b"ERR|subscriber not found"
+            ont_sn = row["ONT_SN"]
+            # Simulate 2009 TL1 INIT-ONT: flap DOWN then UP. We set UP to show effect.
+            conn.execute("UPDATE SUBS_TBL SET LINE_STAT='UP' WHERE SUBS_ID=?", (subs_id,))
+            conn.commit()
+            return f"OK|{ont_sn}|RESET_INITIATED".encode()
+        finally:
+            conn.close()
+
+    def _get_olt_subs(self, olt_id: str) -> bytes:
+        conn = get_connection(self.db_path)
+        try:
+            cur = conn.execute("SELECT SUBS_ID, LINE_STAT FROM SUBS_TBL WHERE OLT_ID=?", (olt_id,))
+            rows = cur.fetchall()
+            if not rows:
+                return b"ERR|olt not found"
+            # OK|count|SUBS1:STAT1,SUBS2:STAT2
+            payload = ",".join(f"{r['SUBS_ID']}:{r['LINE_STAT']}" for r in rows)
+            return f"OK|{len(rows)}|{payload}".encode()
         finally:
             conn.close()
