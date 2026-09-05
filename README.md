@@ -114,3 +114,11 @@ policy.evaluate(identity, context, action, resource)
   not at session start, not in a permission table.
 Adapter re-checks independently. Bypass one layer ≠ bypass.
 ```
+
+## Local Run Screenshots
+
+Verified locally 2026-09-05 — 70 passed, allow/deny proof, Docker build:
+
+![pytest 70 passed](docs/screenshots/01-pytest-70-passed.png)
+![demo allow vs deny](docs/screenshots/02-demo-allow-deny-proof.png)
+![docker build](docs/screenshots/03-docker-build.png)
