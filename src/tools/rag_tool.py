@@ -83,7 +83,7 @@ def query_docs_tool(
 
     warnings = list(rag.warnings)
     for c in chunks:
-        if c.staleness in ("superseded", "deprecated", "conflicts_with_live"):
+        if c.staleness in ("stale", "superseded", "deprecated", "conflicts_with_live"):
             warnings.append(f"{c.doc_id} {c.staleness}: {c.staleness_reason}")
     if decision.redact:
         warnings.append("Redacted sensitive fields per policy (redact=true)")

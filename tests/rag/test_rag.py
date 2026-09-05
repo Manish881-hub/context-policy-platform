@@ -36,6 +36,19 @@ def test_conflicts_with_live_for_ont():
     assert conflicted[0].conflicts_with_live is True
     assert conflicted[0].staleness == "conflicts_with_live"
 
+def test_stale_doc_warns_do_not_serve(tmp_db):
+    # Regression: DOC-2011-WIFI is superseded (stale) yet top-scoring — must warn,
+    # never served silently next to fresh. Same bug class as docs/breakage.md.
+    store = RagStore()
+    res = store.search("wifi password retrieval no checkin", top_k=5)
+    stale = [c for c in res.chunks if c.doc_id == "DOC-2011-WIFI"]
+    assert stale and stale[0].staleness == "stale"
+    assert any("DOC-2011-WIFI" in w and "do not serve as current" in w for w in res.warnings)
+    from src.tools.rag_tool import query_docs_tool
+    tool_res = query_docs_tool(query="wifi password retrieval no checkin", queue_origin="field_app", gps_verified_on_site=True, field_checkin_active=True, subscriber_id="S123", db_path=tmp_db)
+    assert tool_res.status == "success"
+    assert any("DOC-2011-WIFI" in w for w in tool_res.data["warnings"])
+
 def test_rag_tool_policy_enforced(tmp_db):
     from src.tools.rag_tool import query_docs_tool
     # unauthorized queue should be denied before RAG search

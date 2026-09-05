@@ -197,7 +197,7 @@ class RagStore:
                 staleness=staleness,
                 staleness_reason=reason,
             )
-            if staleness in ("superseded", "deprecated") and not include_stale:
+            if staleness in ("stale", "superseded", "deprecated") and not include_stale:
                 warnings.append(f"{chunk.doc_id} is {staleness}: {reason} — do not serve as current")
             results.append(rc)
         # re-sort: fresh first, then stale, then superseded/deprecated
